@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.15)
-project(equinox VERSION 1.0.0 LANGUAGES C)
+cmake_minimum_required(VERSION 3.10)
+project(equinox VERSION 1.0.0 LANGUAGES C CXX)
 
-# C standard
+# Set C standard
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
@@ -19,13 +19,23 @@ endif()
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/uthash/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tlsf
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libdag-ethash/
 )
 
 # Third-party libraries
-add_subdirectory(third_party/uthash EXCLUDE_FROM_ALL)
-add_subdirectory(third_party/tlsf EXCLUDE_FROM_ALL)
-add_subdirectory(third_party/libdag-ethash EXCLUDE_FROM_ALL)
+# uthash is header-only, no library to link.
+add_library(tlsf STATIC third_party/tlsf/tlsf.c)
+set_target_properties(tlsf PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/third_party/tlsf
+)
+target_include_directories(tlsf PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tlsf
+)
+
+set(TLSF_LIBRARY $<TARGET_FILE:tlsf>)
+set(DAG_ETHASH_LIBRARY "")
 
 # Source files
 set(EQUINOX_SOURCES
@@ -49,32 +59,61 @@ set(EQUINOX_HEADERS
     include/equinox/libutils.h
 )
 
-# Shared library
+# Build shared library
 if(EQX_BUILD_SHARED)
-    add_library(equinox SHARED ${EQUINOX_SOURCES})
-    target_include_directories(equinox PUBLIC
+    add_library(equinox_shared SHARED ${EQUINOX_SOURCES})
+    set_target_properties(equinox_shared PROPERTIES
+        OUTPUT_NAME equinox
+        VERSION ${PROJECT_VERSION}
+        SOVERSION 1
+    )
+    target_link_libraries(equinox_shared
+        PRIVATE ${TLSF_LIBRARY} ${DAG_ETHASH_LIBRARY}
+    )
+    target_include_directories(equinox_shared PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
     )
-    set_target_properties(equinox PROPERTIES
-        VERSION ${PROJECT_VERSION}
-        SOVERSION 1
-        PUBLIC_HEADER "${EQUINOX_HEADERS}"
+    install(TARGETS equinox_shared
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
     )
 endif()
 
-# Static library
+# Build static library
 if(EQX_BUILD_STATIC)
     add_library(equinox_static STATIC ${EQUINOX_SOURCES})
+    set_target_properties(equinox_static PROPERTIES
+        OUTPUT_NAME equinox
+        VERSION ${PROJECT_VERSION}
+    )
+    target_link_libraries(equinox_static
+        PRIVATE ${TLSF_LIBRARY} ${DAG_ETHASH_LIBRARY}
+    )
     target_include_directories(equinox_static PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
     )
-    set_target_properties(equinox_static PROPERTIES
-        OUTPUT_NAME equinox
-        PUBLIC_HEADER "${EQUINOX_HEADERS}"
+    install(TARGETS equinox_static
+        ARCHIVE DESTINATION lib
     )
 endif()
+
+# Install headers
+install(FILES ${EQUINOX_HEADERS}
+    DESTINATION include/equinox
+)
+
+# pkg-config file
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/equinox.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/equinox.pc
+    @ONLY
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/equinox.pc
+    DESTINATION lib/pkgconfig
+)
 
 # Tests
 if(EQX_BUILD_TESTS)
@@ -87,25 +126,14 @@ if(EQX_BUILD_DOCS)
     add_subdirectory(docs)
 endif()
 
-# Install rules
-include(GNUInstallDirs)
-
-if(EQX_BUILD_SHARED)
-    install(TARGETS equinox
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/equinox
-    )
-endif()
-
-if(EQX_BUILD_STATIC)
-    install(TARGETS equinox_static
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/equinox
-    )
-endif()
-
-# pkg-config
-configure_file(equinox.pc.in equinox.pc @ONLY)
-install(FILES ${CMAKE_BINARY_DIR}/equinox.pc
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
-)
+# Summary
+message(STATUS "")
+message(STATUS "Equinox Configuration Summary:")
+message(STATUS "  Version:        ${PROJECT_VERSION}")
+message(STATUS "  C Standard:     C${CMAKE_C_STANDARD}")
+message(STATUS "  Build shared:   ${EQX_BUILD_SHARED}")
+message(STATUS "  Build static:   ${EQX_BUILD_STATIC}")
+message(STATUS "  Build tests:    ${EQX_BUILD_TESTS}")
+message(STATUS "  Build docs:     ${EQX_BUILD_DOCS}")
+message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "")

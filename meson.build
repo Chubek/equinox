@@ -33,7 +33,13 @@ add_project_arguments(
 )
 
 # Include directories
-inc = include_directories('include', 'third_party')
+inc = include_directories(
+  'include',
+  'third_party',
+  'third_party/uthash/src',
+  'third_party/tlsf',
+  'third_party/libdag-ethash',
+)
 
 # Third-party dependencies
 uthash_dep = dependency('uthash', 
@@ -43,7 +49,7 @@ uthash_dep = dependency('uthash',
 
 if not uthash_dep.found()
   uthash_dep = declare_dependency(
-    include_directories: include_directories('third_party/uthash')
+    include_directories: include_directories('third_party/uthash/src')
   )
 endif
 

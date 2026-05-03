@@ -70,6 +70,33 @@ bool unionfind_is_valid_id(const unionfind_t* uf, uf_id_t id);
 /* String representation for debugging */
 char* unionfind_to_string(const unionfind_t* uf);
 
+
+/* Legacy API compatibility (eqx_ prefix) */
+typedef unionfind_t eqx_unionfind_t;
+typedef uf_id_t eqx_eclass_id_t;
+
+#ifndef EQX_ECLASS_ID_INVALID
+#define EQX_ECLASS_ID_INVALID ((eqx_eclass_id_t)-1)
+#endif
+
+eqx_unionfind_t* eqx_unionfind_create(size_t initial_capacity);
+void eqx_unionfind_destroy(eqx_unionfind_t* uf);
+eqx_eclass_id_t eqx_unionfind_make_set(eqx_unionfind_t* uf);
+eqx_eclass_id_t eqx_unionfind_find(eqx_unionfind_t* uf, eqx_eclass_id_t id);
+eqx_eclass_id_t eqx_unionfind_union(eqx_unionfind_t* uf, eqx_eclass_id_t id1, eqx_eclass_id_t id2);
+bool eqx_unionfind_equiv(eqx_unionfind_t* uf, eqx_eclass_id_t id1, eqx_eclass_id_t id2);
+size_t eqx_unionfind_size(const eqx_unionfind_t* uf);
+size_t eqx_unionfind_num_sets(const eqx_unionfind_t* uf);
+
+static inline bool eqx_unionfind_equivalent(eqx_unionfind_t* uf, eqx_eclass_id_t id1, eqx_eclass_id_t id2) {
+    return eqx_unionfind_equiv(uf, id1, id2);
+}
+
+static inline size_t eqx_unionfind_count_sets(const eqx_unionfind_t* uf) {
+    return eqx_unionfind_num_sets(uf);
+}
+
+
 #ifdef __cplusplus
 }
 #endif

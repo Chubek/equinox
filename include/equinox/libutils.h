@@ -20,9 +20,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
-/* Include third-party dependencies */
-#include "libutil-includes.h"
+/* uthash - header-only hash table library */
+#include "uthash.h"
+#include "utstring.h"
+#include "utarray.h"
+
+/* TLSF - Two-Level Segregated Fit memory allocator */
+#include "tlsf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -624,51 +630,10 @@ LIBUTIL_FUNC bool libutil_file_exists(const char* filename) {
     return false;
 }
 
-/* ========================================================================
- * Ethash DAG Utilities (wrapper around libdag-ethash)
- * ======================================================================== */
-
-/**
- * @brief Generate Ethash DAG for given epoch
- * @param epoch Epoch number
- * @param dag Output: pointer to DAG structure
- * @return true on success
+/* NOTE: libdag-ethash is vendored with a lower-level C API (`hashimoto*` and DAG/cache
+ * helpers), which doesn't match this project's previous ethash object-style wrapper. The
+ * ethash helpers here are intentionally omitted until a compatibility layer is reintroduced.
  */
-LIBUTIL_FUNC bool libutil_ethash_generate_dag(uint64_t epoch, ethash_light_t* dag) {
-    if (!dag) return false;
-    *dag = ethash_light_new(epoch);
-    return *dag != NULL;
-}
-
-/**
- * @brief Free Ethash DAG
- * @param dag DAG to free
- */
-LIBUTIL_FUNC void libutil_ethash_free_dag(ethash_light_t dag) {
-    if (dag) ethash_light_delete(dag);
-}
-
-/**
- * @brief Compute Ethash hash
- * @param dag DAG structure
- * @param header_hash Header hash (32 bytes)
- * @param nonce Nonce value
- * @param result Output: hash result (32 bytes)
- * @param mix_hash Output: mix hash (32 bytes)
- * @return true on success
- */
-LIBUTIL_FUNC bool libutil_ethash_compute(ethash_light_t dag, const uint8_t* header_hash, 
-                                         uint64_t nonce, uint8_t* result, uint8_t* mix_hash) {
-    if (!dag || !header_hash || !result || !mix_hash) return false;
-    
-    ethash_return_value_t ret = ethash_light_compute(dag, 
-        *(ethash_h256_t*)header_hash, nonce);
-    
-    memcpy(result, ret.result.b, 32);
-    memcpy(mix_hash, ret.mix_hash.b, 32);
-    
-    return true;
-}
 
 #ifdef __cplusplus
 }

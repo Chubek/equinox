@@ -59,3 +59,5 @@ build-*/
 build_*/
 
 _extracted
+
+DISCOVERED_BUGS.md

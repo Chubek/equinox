@@ -1,3 +1,5 @@
+#include <equinox/egraph.h>
+#include <equinox/eclass.h>
 #include <equinox/enode.h>
 #include <equinox/libutils.h>
 #include <stdlib.h>
@@ -135,12 +137,12 @@ uint32_t eqx_enode_hash(const eqx_enode_t* node) {
  * E-node Canonicalization
  * ========================================================================== */
 
-void eqx_enode_canonicalize(eqx_enode_t* node, eqx_eclass_id_t (*find)(eqx_eclass_id_t)) {
+void eqx_enode_canonicalize(eqx_enode_t* node, struct unionfind* uf) {
     assert(node != NULL);
-    assert(find != NULL);
+    assert(uf != NULL);
     
     for (size_t i = 0; i < node->arity; i++) {
-        node->children[i] = find(node->children[i]);
+        node->children[i] = eqx_unionfind_find(uf, node->children[i]);
     }
 }
 

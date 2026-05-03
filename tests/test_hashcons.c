@@ -13,7 +13,7 @@ TEST_CASE("hashcons insert and lookup", "[hashcons]") {
     eqx_hashcons_t *hc = eqx_hashcons_create(16, 0.75);
     
     SECTION("insert single node") {
-        eqx_enode_t *node = eqx_enode_create(42, NULL, 0);
+        eqx_enode_t *node = eqx_enode_create(42, 0, NULL);
         eqx_eclass_id_t id = 100;
         
         bool inserted = eqx_hashcons_insert(hc, node, id);
@@ -23,7 +23,7 @@ TEST_CASE("hashcons insert and lookup", "[hashcons]") {
     }
     
     SECTION("lookup existing node") {
-        eqx_enode_t *node = eqx_enode_create(42, NULL, 0);
+        eqx_enode_t *node = eqx_enode_create(42, 0, NULL);
         eqx_eclass_id_t id = 100;
         
         eqx_hashcons_insert(hc, node, id);
@@ -37,7 +37,7 @@ TEST_CASE("hashcons insert and lookup", "[hashcons]") {
     }
     
     SECTION("lookup non-existing node") {
-        eqx_enode_t *node = eqx_enode_create(42, NULL, 0);
+        eqx_enode_t *node = eqx_enode_create(42, 0, NULL);
         
         eqx_eclass_id_t found_id;
         bool found = eqx_hashcons_lookup(hc, node, &found_id);
@@ -47,7 +47,7 @@ TEST_CASE("hashcons insert and lookup", "[hashcons]") {
     }
     
     SECTION("insert duplicate returns false") {
-        eqx_enode_t *node = eqx_enode_create(42, NULL, 0);
+        eqx_enode_t *node = eqx_enode_create(42, 0, NULL);
         eqx_eclass_id_t id = 100;
         
         bool inserted1 = eqx_hashcons_insert(hc, node, id);
@@ -66,7 +66,7 @@ TEST_CASE("hashcons remove", "[hashcons]") {
     eqx_hashcons_t *hc = eqx_hashcons_create(16, 0.75);
     
     SECTION("remove existing node") {
-        eqx_enode_t *node = eqx_enode_create(42, NULL, 0);
+        eqx_enode_t *node = eqx_enode_create(42, 0, NULL);
         eqx_eclass_id_t id = 100;
         
         eqx_hashcons_insert(hc, node, id);
@@ -82,7 +82,7 @@ TEST_CASE("hashcons remove", "[hashcons]") {
     }
     
     SECTION("remove non-existing node") {
-        eqx_enode_t *node = eqx_enode_create(42, NULL, 0);
+        eqx_enode_t *node = eqx_enode_create(42, 0, NULL);
         
         bool removed = eqx_hashcons_remove(hc, node);
         REQUIRE_FALSE(removed);
@@ -97,9 +97,9 @@ TEST_CASE("hashcons multiple nodes", "[hashcons]") {
     eqx_hashcons_t *hc = eqx_hashcons_create(16, 0.75);
     
     SECTION("insert and lookup multiple nodes") {
-        eqx_enode_t *node1 = eqx_enode_create(1, NULL, 0);
-        eqx_enode_t *node2 = eqx_enode_create(2, NULL, 0);
-        eqx_enode_t *node3 = eqx_enode_create(3, NULL, 0);
+        eqx_enode_t *node1 = eqx_enode_create(1, 0, NULL);
+        eqx_enode_t *node2 = eqx_enode_create(2, 0, NULL);
+        eqx_enode_t *node3 = eqx_enode_create(3, 0, NULL);
         
         eqx_hashcons_insert(hc, node1, 100);
         eqx_hashcons_insert(hc, node2, 200);
@@ -125,9 +125,9 @@ TEST_CASE("hashcons multiple nodes", "[hashcons]") {
 TEST_CASE("hashcons iterator", "[hashcons]") {
     eqx_hashcons_t *hc = eqx_hashcons_create(16, 0.75);
     
-    eqx_enode_t *node1 = eqx_enode_create(1, NULL, 0);
-    eqx_enode_t *node2 = eqx_enode_create(2, NULL, 0);
-    eqx_enode_t *node3 = eqx_enode_create(3, NULL, 0);
+    eqx_enode_t *node1 = eqx_enode_create(1, 0, NULL);
+    eqx_enode_t *node2 = eqx_enode_create(2, 0, NULL);
+    eqx_enode_t *node3 = eqx_enode_create(3, 0, NULL);
     
     eqx_hashcons_insert(hc, node1, 100);
     eqx_hashcons_insert(hc, node2, 200);
@@ -163,14 +163,14 @@ TEST_CASE("hashcons resizing", "[hashcons]") {
     SECTION("automatic resize on load factor") {
         // Insert enough nodes to trigger resize
         for (int i = 0; i < 10; i++) {
-            eqx_enode_t *node = eqx_enode_create(i, NULL, 0);
+            eqx_enode_t *node = eqx_enode_create(i, 0, NULL);
             eqx_hashcons_insert(hc, node, i + 100);
             eqx_enode_destroy(node);
         }
         
         // Verify all nodes are still accessible
         for (int i = 0; i < 10; i++) {
-            eqx_enode_t *node = eqx_enode_create(i, NULL, 0);
+            eqx_enode_t *node = eqx_enode_create(i, 0, NULL);
             eqx_eclass_id_t id;
             bool found = eqx_hashcons_lookup(hc, node, &id);
             REQUIRE(found);
@@ -190,8 +190,8 @@ TEST_CASE("hashcons collision handling", "[hashcons]") {
         eqx_eclass_id_t children1[] = {1, 2};
         eqx_eclass_id_t children2[] = {3, 4};
         
-        eqx_enode_t *node1 = eqx_enode_create(100, children1, 2);
-        eqx_enode_t *node2 = eqx_enode_create(100, children2, 2);
+        eqx_enode_t *node1 = eqx_enode_create(100, 2, children1);
+        eqx_enode_t *node2 = eqx_enode_create(100, 2, children2);
         
         eqx_hashcons_insert(hc, node1, 1000);
         eqx_hashcons_insert(hc, node2, 2000);

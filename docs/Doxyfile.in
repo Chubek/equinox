@@ -9,7 +9,7 @@ PROJECT_NAME           = "Equinox E-Graph Library"
 PROJECT_NUMBER         = 0.1.0
 PROJECT_BRIEF          = "High-performance C library for equality saturation and term rewriting"
 PROJECT_LOGO           = 
-OUTPUT_DIRECTORY       = docs/html
+OUTPUT_DIRECTORY       = @DOXYGEN_OUTPUT_DIRECTORY@
 CREATE_SUBDIRS         = NO
 ALLOW_UNICODE_NAMES    = NO
 OUTPUT_LANGUAGE        = English
@@ -126,10 +126,7 @@ WARN_LOGFILE           =
 # Configuration options related to the input files
 #---------------------------------------------------------------------------
 
-INPUT                  = include/equinox \
-                         src \
-                         docs/Manual.i \
-                         README.md
+INPUT                  = @DOXYGEN_INPUT_PATHS@
 INPUT_ENCODING         = UTF-8
 INPUT_FILE_ENCODING    = 
 FILE_PATTERNS          = *.c \
@@ -347,8 +344,7 @@ ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = YES
 EXPAND_ONLY_PREDEF     = NO
 SEARCH_INCLUDES        = YES
-INCLUDE_PATH           = include \
-                         third_party
+INCLUDE_PATH           = @DOXYGEN_INCLUDE_PATHS@
 INCLUDE_FILE_PATTERNS  = 
 PREDEFINED             = LIBUTIL_FUNC=static\ inline \
                          __attribute__(x)=

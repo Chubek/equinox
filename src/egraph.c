@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 /* Default configuration values */
 static const eqx_egraph_config_t DEFAULT_CONFIG = {
@@ -25,14 +26,7 @@ struct eqx_egraph {
     size_t eclasses_capacity;
     bool dirty;
     size_t pending_count;
-};
-
-/* Statistics structure */
-struct eqx_egraph_stats {
-    size_t num_enodes;
-    size_t num_eclasses;
-    size_t num_unions;
-    size_t hashcons_size;
+    size_t union_count;
 };
 
 /* Iterator structure */
@@ -46,13 +40,16 @@ eqx_egraph_config_t eqx_egraph_config_default(void) {
     return DEFAULT_CONFIG;
 }
 
-/* Creation and destruction */
 eqx_egraph_t *eqx_egraph_create(const eqx_egraph_config_t *config) {
     eqx_egraph_t *eg = malloc(sizeof(eqx_egraph_t));
     if (!eg) return NULL;
 
     eg->config = config ? *config : DEFAULT_CONFIG;
-    
+    eg->num_eclasses = 0;
+    eg->dirty = false;
+    eg->pending_count = 0;
+    eg->union_count = 0;
+
     eg->uf = eqx_unionfind_create(eg->config.initial_capacity);
     if (!eg->uf) {
         free(eg);
@@ -60,8 +57,7 @@ eqx_egraph_t *eqx_egraph_create(const eqx_egraph_config_t *config) {
     }
 
     eg->hashcons = eqx_hashcons_create(eg->config.initial_capacity,
-                                       (eqx_hash_fn)eqx_enode_hash,
-                                       (eqx_equal_fn)eqx_enode_equal);
+                                       0.75);
     if (!eg->hashcons) {
         eqx_unionfind_destroy(eg->uf);
         free(eg);
@@ -76,10 +72,6 @@ eqx_egraph_t *eqx_egraph_create(const eqx_egraph_config_t *config) {
         free(eg);
         return NULL;
     }
-
-    eg->num_eclasses = 0;
-    eg->dirty = false;
-    eg->pending_count = 0;
 
     return eg;
 }
@@ -104,39 +96,34 @@ eqx_eclass_id_t eqx_egraph_add(eqx_egraph_t *eg, eqx_operator_t op,
                                 size_t arity, const eqx_eclass_id_t *children) {
     assert(eg);
 
-    /* Canonicalize children */
     eqx_eclass_id_t *canon_children = NULL;
     if (arity > 0) {
         canon_children = malloc(arity * sizeof(eqx_eclass_id_t));
         if (!canon_children) return EQX_ECLASS_ID_INVALID;
-        
+
         for (size_t i = 0; i < arity; i++) {
             canon_children[i] = eqx_unionfind_find(eg->uf, children[i]);
         }
     }
 
-    /* Create temporary node for lookup */
     eqx_enode_t *temp = eqx_enode_create(op, arity, canon_children);
     free(canon_children);
     if (!temp) return EQX_ECLASS_ID_INVALID;
 
-    /* Check if node already exists */
-    eqx_enode_t *existing = eqx_hashcons_lookup(eg->hashcons, temp);
-    if (existing) {
+    eqx_eclass_id_t existing_id = EQX_ECLASS_ID_INVALID;
+    if (eqx_hashcons_lookup(eg->hashcons, temp, &existing_id)) {
         eqx_enode_destroy(temp);
-        return eqx_enode_get_eclass(existing);
+        return existing_id;
     }
 
-    /* Create new e-class */
     eqx_eclass_id_t new_id = eqx_unionfind_make_set(eg->uf);
     if (new_id == EQX_ECLASS_ID_INVALID) {
         eqx_enode_destroy(temp);
         return EQX_ECLASS_ID_INVALID;
     }
 
-    /* Expand eclasses array if needed */
     if (new_id >= eg->eclasses_capacity) {
-        size_t new_cap = eg->eclasses_capacity * 2;
+        size_t new_cap = eg->eclasses_capacity ? (eg->eclasses_capacity * 2) : 16;
         eqx_eclass_t **new_eclasses = realloc(eg->eclasses, new_cap * sizeof(eqx_eclass_t *));
         if (!new_eclasses) {
             eqx_enode_destroy(temp);
@@ -148,7 +135,6 @@ eqx_eclass_id_t eqx_egraph_add(eqx_egraph_t *eg, eqx_operator_t op,
         eg->eclasses_capacity = new_cap;
     }
 
-    /* Create e-class */
     eqx_eclass_t *eclass = eqx_eclass_create(new_id);
     if (!eclass) {
         eqx_enode_destroy(temp);
@@ -158,14 +144,16 @@ eqx_eclass_id_t eqx_egraph_add(eqx_egraph_t *eg, eqx_operator_t op,
     eg->eclasses[new_id] = eclass;
     eg->num_eclasses++;
 
-    /* Set node's e-class and add to e-class */
     eqx_enode_set_eclass(temp, new_id);
     eqx_eclass_add_node(eclass, temp);
 
-    /* Insert into hashcons */
-    eqx_hashcons_insert(eg->hashcons, temp);
+    if (!eqx_hashcons_insert(eg->hashcons, temp, new_id)) {
+        eqx_enode_destroy(temp);
+        eqx_eclass_destroy(eclass);
+        eg->eclasses[new_id] = NULL;
+        return EQX_ECLASS_ID_INVALID;
+    }
 
-    /* Add as parent to children's e-classes */
     for (size_t i = 0; i < arity; i++) {
         eqx_eclass_id_t child_id = eqx_enode_get_child(temp, i);
         eqx_eclass_id_t canon_child = eqx_unionfind_find(eg->uf, child_id);
@@ -185,9 +173,9 @@ bool eqx_egraph_union(eqx_egraph_t *eg, eqx_eclass_id_t id1, eqx_eclass_id_t id2
 
     if (id1 == id2) return true;
 
-    if (!eqx_unionfind_union(eg->uf, id1, id2)) return false;
-
-    eqx_eclass_id_t new_id = eqx_unionfind_find(eg->uf, id1);
+    eqx_eclass_id_t new_id = eqx_unionfind_union(eg->uf, id1, id2);
+    if (new_id == EQX_ECLASS_ID_INVALID) return false;
+    ++eg->union_count;
     eqx_eclass_id_t old_id = (new_id == id1) ? id2 : id1;
 
     if (new_id < eg->num_eclasses && old_id < eg->num_eclasses &&
@@ -211,7 +199,6 @@ bool eqx_egraph_equiv(eqx_egraph_t *eg, eqx_eclass_id_t id1, eqx_eclass_id_t id2
     return eqx_unionfind_equiv(eg->uf, id1, id2);
 }
 
-/* Congruence closure */
 bool eqx_egraph_rebuild(eqx_egraph_t *eg) {
     assert(eg);
 
@@ -220,8 +207,10 @@ bool eqx_egraph_rebuild(eqx_egraph_t *eg) {
     size_t iterations = 0;
     while (eg->pending_count > 0 && iterations < eg->config.max_iterations) {
         eg->pending_count = 0;
+        eqx_hashcons_t *rebuilt = eqx_hashcons_create(eg->config.initial_capacity,
+                                                      0.75);
+        if (!rebuilt) return false;
 
-        /* Process all e-classes */
         for (size_t i = 0; i < eg->num_eclasses; i++) {
             eqx_eclass_t *eclass = eg->eclasses[i];
             if (!eclass) continue;
@@ -229,13 +218,27 @@ bool eqx_egraph_rebuild(eqx_egraph_t *eg) {
             eqx_eclass_id_t canon_id = eqx_unionfind_find(eg->uf, i);
             if (canon_id != i) continue;
 
-            /* Canonicalize all nodes in e-class */
-            eqx_enode_t *node = eqx_eclass_get_nodes(eclass);
-            while (node) {
-                eqx_enode_canonicalize(node, (eqx_find_fn)eqx_unionfind_find, eg->uf);
-                node = (eqx_enode_t *)node; /* Simplified - would need proper list traversal */
+            for (eqx_enode_t *node = eqx_eclass_get_nodes(eclass); node != NULL; node = node->next_in_class) {
+                eqx_enode_canonicalize(node, eg->uf);
+                eqx_eclass_id_t node_class = eqx_unionfind_find(eg->uf,
+                                                                eqx_enode_get_eclass(node));
+                node->eclass = node_class;
+
+                eqx_eclass_id_t existing_id = EQX_ECLASS_ID_INVALID;
+                if (eqx_hashcons_lookup(rebuilt, node, &existing_id)) {
+                    eqx_egraph_union(eg, node_class, existing_id);
+                    continue;
+                }
+
+                if (!eqx_hashcons_insert(rebuilt, node, node_class)) {
+                    eqx_hashcons_destroy(rebuilt);
+                    return false;
+                }
             }
         }
+
+        eqx_hashcons_destroy(eg->hashcons);
+        eg->hashcons = rebuilt;
 
         iterations++;
     }
@@ -244,7 +247,6 @@ bool eqx_egraph_rebuild(eqx_egraph_t *eg) {
     return iterations < eg->config.max_iterations;
 }
 
-/* Accessors */
 size_t eqx_egraph_num_eclasses(const eqx_egraph_t *eg) {
     assert(eg);
     return eg->num_eclasses;
@@ -257,45 +259,32 @@ eqx_eclass_t *eqx_egraph_get_eclass(eqx_egraph_t *eg, eqx_eclass_id_t id) {
     return eg->eclasses[id];
 }
 
-/* Statistics */
-eqx_egraph_stats_t *eqx_egraph_get_stats(const eqx_egraph_t *eg) {
+void eqx_egraph_get_stats(const eqx_egraph_t *eg, eqx_egraph_stats_t *out_stats) {
     assert(eg);
+    assert(out_stats);
 
-    eqx_egraph_stats_t *stats = malloc(sizeof(eqx_egraph_stats_t));
-    if (!stats) return NULL;
-
-    stats->num_eclasses = eg->num_eclasses;
-    stats->num_enodes = eqx_hashcons_size(eg->hashcons);
-    stats->num_unions = 0; /* Would need tracking */
-    stats->hashcons_size = eqx_hashcons_size(eg->hashcons);
-
-    return stats;
-}
-
-void eqx_egraph_stats_destroy(eqx_egraph_stats_t *stats) {
-    free(stats);
+    out_stats->num_eclasses = eg->num_eclasses;
+    out_stats->num_enodes = eqx_hashcons_size(eg->hashcons);
+    out_stats->num_unions = eg->union_count;
+    out_stats->hashcons_size = eqx_hashcons_size(eg->hashcons);
 }
 
 /* Iterator */
-eqx_egraph_iter_t *eqx_egraph_iter_create(eqx_egraph_t *eg) {
+eqx_egraph_iter_t eqx_egraph_iter_begin(eqx_egraph_t *eg) {
     assert(eg);
-
-    eqx_egraph_iter_t *iter = malloc(sizeof(eqx_egraph_iter_t));
+    struct eqx_egraph_iter* iter = malloc(sizeof(struct eqx_egraph_iter));
     if (!iter) return NULL;
-
     iter->egraph = eg;
     iter->current = 0;
-
     return iter;
 }
 
-void eqx_egraph_iter_destroy(eqx_egraph_iter_t *iter) {
+void eqx_egraph_iter_end(eqx_egraph_iter_t iter) {
     free(iter);
 }
 
-bool eqx_egraph_iter_has_next(const eqx_egraph_iter_t *iter) {
+bool eqx_egraph_iter_has_next(const eqx_egraph_iter_t iter) {
     assert(iter);
-    
     for (size_t i = iter->current; i < iter->egraph->num_eclasses; i++) {
         eqx_eclass_id_t canon = eqx_unionfind_find(iter->egraph->uf, i);
         if (canon == i && iter->egraph->eclasses[i]) {
@@ -305,20 +294,19 @@ bool eqx_egraph_iter_has_next(const eqx_egraph_iter_t *iter) {
     return false;
 }
 
-eqx_eclass_t *eqx_egraph_iter_next(eqx_egraph_iter_t *iter) {
+eqx_eclass_id_t eqx_egraph_iter_next(eqx_egraph_iter_t iter) {
     assert(iter);
 
     while (iter->current < iter->egraph->num_eclasses) {
         size_t i = iter->current++;
         eqx_eclass_id_t canon = eqx_unionfind_find(iter->egraph->uf, i);
         if (canon == i && iter->egraph->eclasses[i]) {
-            return iter->egraph->eclasses[i];
+            return (eqx_eclass_id_t)i;
         }
     }
-    return NULL;
+    return EQX_ECLASS_ID_INVALID;
 }
 
-/* Debugging */
 void eqx_egraph_print(const eqx_egraph_t *eg, FILE *out) {
     assert(eg);
     if (!out) out = stdout;

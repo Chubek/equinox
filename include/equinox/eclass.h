@@ -8,37 +8,39 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 /* Forward declarations */
 typedef struct enode enode_t;
 typedef uint32_t eclass_id_t;
+
+typedef struct eqx_parent_entry {
+    enode_t* parent;
+    struct eqx_parent_entry* next;
+} eqx_parent_entry_t;
 
 /* Invalid eclass ID constant */
 #define ECLASS_ID_INVALID ((eclass_id_t)-1)
 
 /* EClass represents an equivalence class of terms */
 typedef struct eclass {
-    /* Unique identifier for this eclass */
     eclass_id_t id;
-    
-    /* Array of enodes in this eclass */
-    enode_t** nodes;
+
+    /* Legacy fields used by eqx_* API */
+    enode_t* nodes;
     size_t node_count;
-    size_t node_capacity;
-    
-    /* Parent eclasses that reference this eclass */
-    eclass_id_t* parents;
+    eqx_parent_entry_t* parents;
     size_t parent_count;
     size_t parent_capacity;
-    
-    /* User-defined data associated with this eclass */
+    void* data;
+
+    /* Modern-compatible fields */
     void* user_data;
-    
-    /* Cost for extraction (used in cost-based extraction) */
     double cost;
-    
-    /* Best representative enode for extraction */
     enode_t* best_node;
+    size_t node_capacity;
+    eclass_id_t* parent_ids;
+    size_t parent_id_count;
 } eclass_t;
 
 /* EClass creation and destruction */
@@ -85,6 +87,38 @@ enode_t* eclass_node_iterator_next(eclass_node_iterator_t* iter);
 
 /* String representation for debugging */
 char* eclass_to_string(const eclass_t* eclass);
+
+/* =========================================================================
+ * Legacy API compatibility (eqx_ prefix)
+ * ========================================================================= */
+typedef eclass_t eqx_eclass_t;
+typedef eclass_id_t eqx_eclass_id_t;
+
+#ifndef EQX_ECLASS_ID_INVALID
+#define EQX_ECLASS_ID_INVALID ((eqx_eclass_id_t)-1)
+#endif
+
+#include "enode.h"
+
+eqx_eclass_t* eqx_eclass_create(eqx_eclass_id_t id);
+void eqx_eclass_destroy(eqx_eclass_t* eclass);
+eqx_eclass_id_t eqx_eclass_get_id(const eqx_eclass_t* eclass);
+eqx_enode_t* eqx_eclass_get_nodes(const eqx_eclass_t* eclass);
+void* eqx_eclass_get_data(const eqx_eclass_t* eclass);
+void eqx_eclass_set_data(eqx_eclass_t* eclass, void* data);
+void eqx_eclass_add_node(eqx_eclass_t* eclass, eqx_enode_t* node);
+bool eqx_eclass_contains_node(const eqx_eclass_t* eclass, const eqx_enode_t* node);
+size_t eqx_eclass_node_count(const eqx_eclass_t* eclass);
+void eqx_eclass_add_parent(eqx_eclass_t* eclass, eqx_enode_t* parent);
+void eqx_eclass_remove_parent(eqx_eclass_t* eclass, eqx_enode_t* parent);
+eqx_parent_entry_t* eqx_eclass_get_parents(const eqx_eclass_t* eclass);
+size_t eqx_eclass_parent_count(const eqx_eclass_t* eclass);
+void eqx_eclass_merge_into(eqx_eclass_t* from, eqx_eclass_t* to);
+eqx_enode_t* eqx_eclass_find_node(const eqx_eclass_t* eclass,
+                                  uint32_t op,
+                                  size_t arity,
+                                  const eqx_eclass_id_t* children);
+void eqx_eclass_print(const eqx_eclass_t* eclass, FILE* out);
 
 #ifdef __cplusplus
 }

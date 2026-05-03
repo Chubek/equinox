@@ -5,7 +5,7 @@
 
 TEST_CASE("enode creation and basic operations", "[enode]") {
     SECTION("create constant node") {
-        eqx_enode_t *node = eqx_enode_create(42, NULL, 0);
+        eqx_enode_t *node = eqx_enode_create(42, 0, NULL);
         REQUIRE(node != NULL);
         REQUIRE(eqx_enode_get_operator(node) == 42);
         REQUIRE(eqx_enode_get_arity(node) == 0);
@@ -14,7 +14,7 @@ TEST_CASE("enode creation and basic operations", "[enode]") {
     
     SECTION("create node with children") {
         eqx_eclass_id_t children[] = {1, 2, 3};
-        eqx_enode_t *node = eqx_enode_create(100, children, 3);
+        eqx_enode_t *node = eqx_enode_create(100, 3, children);
         REQUIRE(node != NULL);
         REQUIRE(eqx_enode_get_operator(node) == 100);
         REQUIRE(eqx_enode_get_arity(node) == 3);
@@ -30,8 +30,8 @@ TEST_CASE("enode hashing", "[enode]") {
         eqx_eclass_id_t children1[] = {1, 2};
         eqx_eclass_id_t children2[] = {1, 2};
         
-        eqx_enode_t *node1 = eqx_enode_create(50, children1, 2);
-        eqx_enode_t *node2 = eqx_enode_create(50, children2, 2);
+        eqx_enode_t *node1 = eqx_enode_create(50, 2, children1);
+        eqx_enode_t *node2 = eqx_enode_create(50, 2, children2);
         
         REQUIRE(eqx_enode_hash(node1) == eqx_enode_hash(node2));
         
@@ -42,8 +42,8 @@ TEST_CASE("enode hashing", "[enode]") {
     SECTION("different operators produce different hashes") {
         eqx_eclass_id_t children[] = {1, 2};
         
-        eqx_enode_t *node1 = eqx_enode_create(50, children, 2);
-        eqx_enode_t *node2 = eqx_enode_create(51, children, 2);
+        eqx_enode_t *node1 = eqx_enode_create(50, 2, children);
+        eqx_enode_t *node2 = eqx_enode_create(51, 2, children);
         
         REQUIRE(eqx_enode_hash(node1) != eqx_enode_hash(node2));
         
@@ -55,8 +55,8 @@ TEST_CASE("enode hashing", "[enode]") {
         eqx_eclass_id_t children1[] = {1, 2};
         eqx_eclass_id_t children2[] = {1, 3};
         
-        eqx_enode_t *node1 = eqx_enode_create(50, children1, 2);
-        eqx_enode_t *node2 = eqx_enode_create(50, children2, 2);
+        eqx_enode_t *node1 = eqx_enode_create(50, 2, children1);
+        eqx_enode_t *node2 = eqx_enode_create(50, 2, children2);
         
         REQUIRE(eqx_enode_hash(node1) != eqx_enode_hash(node2));
         
@@ -70,8 +70,8 @@ TEST_CASE("enode equality", "[enode]") {
         eqx_eclass_id_t children1[] = {1, 2, 3};
         eqx_eclass_id_t children2[] = {1, 2, 3};
         
-        eqx_enode_t *node1 = eqx_enode_create(100, children1, 3);
-        eqx_enode_t *node2 = eqx_enode_create(100, children2, 3);
+        eqx_enode_t *node1 = eqx_enode_create(100, 3, children1);
+        eqx_enode_t *node2 = eqx_enode_create(100, 3, children2);
         
         REQUIRE(eqx_enode_equal(node1, node2));
         
@@ -82,8 +82,8 @@ TEST_CASE("enode equality", "[enode]") {
     SECTION("different operators are not equal") {
         eqx_eclass_id_t children[] = {1, 2};
         
-        eqx_enode_t *node1 = eqx_enode_create(100, children, 2);
-        eqx_enode_t *node2 = eqx_enode_create(101, children, 2);
+        eqx_enode_t *node1 = eqx_enode_create(100, 2, children);
+        eqx_enode_t *node2 = eqx_enode_create(101, 2, children);
         
         REQUIRE_FALSE(eqx_enode_equal(node1, node2));
         
@@ -95,8 +95,8 @@ TEST_CASE("enode equality", "[enode]") {
         eqx_eclass_id_t children1[] = {1, 2};
         eqx_eclass_id_t children2[] = {1, 2, 3};
         
-        eqx_enode_t *node1 = eqx_enode_create(100, children1, 2);
-        eqx_enode_t *node2 = eqx_enode_create(100, children2, 3);
+        eqx_enode_t *node1 = eqx_enode_create(100, 2, children1);
+        eqx_enode_t *node2 = eqx_enode_create(100, 3, children2);
         
         REQUIRE_FALSE(eqx_enode_equal(node1, node2));
         
@@ -117,7 +117,7 @@ TEST_CASE("enode canonicalization", "[enode]") {
         eqx_unionfind_union(uf, id1, id2);
         
         eqx_eclass_id_t children[] = {id2, id3};
-        eqx_enode_t *node = eqx_enode_create(50, children, 2);
+        eqx_enode_t *node = eqx_enode_create(50, 2, children);
         
         eqx_enode_canonicalize(node, uf);
         
@@ -133,7 +133,7 @@ TEST_CASE("enode canonicalization", "[enode]") {
 
 TEST_CASE("enode clone", "[enode]") {
     eqx_eclass_id_t children[] = {10, 20, 30};
-    eqx_enode_t *original = eqx_enode_create(99, children, 3);
+    eqx_enode_t *original = eqx_enode_create(99, 3, children);
     
     eqx_enode_t *clone = eqx_enode_clone(original);
     REQUIRE(clone != NULL);
