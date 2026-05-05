@@ -127,18 +127,23 @@ static bool match_pattern_internal(const eqx_egraph_t* egraph,
     eqx_eclass_t* eclass = eqx_egraph_get_eclass((eqx_egraph_t*)egraph, eclass_id);
     if (!eclass) return false;
 
-    eqx_enode_t* node = eqx_eclass_find_node(eclass, pattern->data.app.op,
-                                            pattern->data.app.arity, NULL);
-    if (!node) return false;
-
-    for (size_t i = 0; i < pattern->data.app.arity; i++) {
-        if (!match_pattern_internal(egraph, pattern->data.app.children[i],
-                                   eqx_enode_get_child(node, i),
-                                   subst)) {
-            return false;
+    for (eqx_enode_t* node = eclass->nodes; node != NULL; node = node->next_in_class) {
+        if (node->op != pattern->data.app.op || node->arity != pattern->data.app.arity) {
+            continue;
         }
+
+        bool ok = true;
+        for (size_t i = 0; i < pattern->data.app.arity; i++) {
+            if (!match_pattern_internal(egraph, pattern->data.app.children[i], node->children[i], subst)) {
+                ok = false;
+                break;
+            }
+        }
+
+        if (ok) return true;
     }
-    return true;
+
+    return false;
 }
 
 bool eqx_pattern_match(eqx_pattern_t* pattern, const eqx_egraph_t* egraph, eqx_eclass_id_t eclass_id, eqx_subst_t* subst) {

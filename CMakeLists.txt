@@ -6,7 +6,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Build options
-option(EQX_BUILD_TESTS "Build tests" ON)
+option(EQX_BUILD_TESTS "Build tests (legacy alias for EQX_BUILD_UNITTEST)" OFF)
+option(EQX_BUILD_UNITTEST "Build unit tests" OFF)
+option(EQX_BUILD_FUZZ "Build fuzz harnesses" OFF)
 option(EQX_BUILD_DOCS "Build documentation" ON)
 option(EQX_BUILD_SHARED "Build shared library" ON)
 option(EQX_BUILD_STATIC "Build static library" ON)
@@ -115,10 +117,18 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/equinox.pc
     DESTINATION lib/pkgconfig
 )
 
-# Tests
 if(EQX_BUILD_TESTS)
+    set(EQX_BUILD_UNITTEST ON)
+endif()
+
+ 
+if(EQX_BUILD_UNITTEST)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(EQX_BUILD_FUZZ)
+    add_subdirectory(fuzz)
 endif()
 
 # Documentation
@@ -133,7 +143,8 @@ message(STATUS "  Version:        ${PROJECT_VERSION}")
 message(STATUS "  C Standard:     C${CMAKE_C_STANDARD}")
 message(STATUS "  Build shared:   ${EQX_BUILD_SHARED}")
 message(STATUS "  Build static:   ${EQX_BUILD_STATIC}")
-message(STATUS "  Build tests:    ${EQX_BUILD_TESTS}")
+message(STATUS "  Build tests:    ${EQX_BUILD_UNITTEST}")
+message(STATUS "  Build fuzz:     ${EQX_BUILD_FUZZ}")
 message(STATUS "  Build docs:     ${EQX_BUILD_DOCS}")
 message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "")
