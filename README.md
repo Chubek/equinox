@@ -31,12 +31,12 @@ mkdir build && cd build
 cmake ..
 make
 sudo make install
-
+```
 See [INSTALL.md](INSTALL.md) for detailed installation instructions.
 
 ### Basic Example
 
-c
+```c
 #include <equinox/egraph.h>
 #include <stdio.h>
 
@@ -67,12 +67,12 @@ printf("Congruence holds: f(a) = f(b)\n");
 egraph_destroy(g);
 return 0;
 }
-
+```
 Compile and run:
-bash
+```bash
 gcc example.c $(pkg-config --cflags --libs equinox) -o example
 ./example
-
+```
 ---
 
 ## What are E-graphs?
@@ -103,36 +103,36 @@ E-graphs can represent all intermediate forms simultaneously and find the optima
 
 ### E-nodes
 An **e-node** represents a term with an operator and children:
-c
+```c
 // Represents: add(x, y)
 eclass_id_t children[] = {x_id, y_id};
 eclass_id_t result = egraph_add(g, "add", children, 2);
-
+```
 ### E-classes
 An **e-class** is an equivalence class containing multiple e-nodes:
-c
+```c
 // After: egraph_union(g, x, y)
 // x and y are in the same e-class
 // All terms containing x are congruent to terms containing y
-
+```
 ### Hash Consing
 Identical terms are automatically shared:
-c
+```c
 eclass_id_t expr1 = egraph_add(g, "f", children, 1);
 eclass_id_t expr2 = egraph_add(g, "f", children, 1);
 // expr1 == expr2 (same e-class)
-
+```
 ### Congruence Closure
 Structural equivalence is maintained automatically:
-c
+```c
 egraph_union(g, a, b);  // Assert a = b
 egraph_rebuild(g);       // Propagate: f(a) = f(b), g(a,x) = g(b,x), etc.
-
+```
 ---
 
 ## Rewriting Example
 
-c
+```c
 #include <equinox/egraph.h>
 #include <equinox/rewrite.h>
 
@@ -154,12 +154,12 @@ printf("Applied rule %zu times\n", num_rewrites);
 
 // Clean up
 rewrite_rule_destroy(rule);
-
+```
 ---
 
 ## Project Structure
 
-
+```
 equinox/
 ├── include/equinox/     # Public headers
 │   ├── egraph.h         # E-graph API
@@ -183,7 +183,7 @@ equinox/
 ├── INSTALL.md           # Installation guide
 ├── GUIDE.md             # User guide
 └── LICENSE              # MIT License
-
+```
 ---
 
 ## Documentation
@@ -196,3 +196,4 @@ equinox/
   cd build
   make docs
   # Open build/docs/html/index.html
+```
