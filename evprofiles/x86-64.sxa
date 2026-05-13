@@ -1,0 +1,5 @@
+(define-isa
+  (instructions
+    (instr "add" (pattern (ADD ?x ?y)) (inputs (reg reg)) (outputs (reg)) (cost 1))
+    (instr "imul" (pattern (MUL ?x ?y)) (inputs (reg reg)) (outputs (reg)) (cost 2))
+    (instr "cmp" (pattern (LESS_THAN ?x ?y)) (inputs (reg reg)) (outputs (flag)) (cost 1))))

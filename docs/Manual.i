@@ -1,450 +1,312 @@
 /**
- * @file Doxygen.i
- * @brief Main Doxygen documentation file for the Equinox E-Graph Library
+ * @file Manual.i
+ * @brief Main Doxygen documentation entry for Equinox and RedVisage
  */
 
 /**
- * @mainpage Equinox E-Graph Library
+ * @mainpage Equinox + RedVisage Manual
  *
  * @section intro_sec Introduction
  *
- * Equinox is a high-performance C library for equality saturation and term rewriting
- * using e-graphs (equality graphs). E-graphs are data structures that efficiently
- * represent equivalence classes of terms and enable powerful program optimization
- * and theorem proving techniques.
+ * Equinox is a C library for equality saturation based on e-graphs.
+ * RedVisage is the RVSDG frontend layered on top of Equinox, with
+ * explicit state-token threading and structured control-flow nodes.
+ *
+ * Major layers in this repository:
+ * - **Equinox Core**: e-graph, e-class/e-node storage, union-find, hashcons, rewrites
+ * - **RedVisage**: RVSDG IR, lowering into Equinox, RVSDG-oriented rewrites, extraction
+ * - **EQVSG (planned/common layer)**: S-expression language and CLI pipeline
  *
  * @section features_sec Key Features
  *
- * - **Efficient E-Graph Implementation**: Union-find based equivalence tracking with
- *   path compression and union by rank
- * - **Hash Consing**: Structural sharing of terms for memory efficiency
- * - **Congruence Closure**: Automatic propagation of equalities through term structure
- * - **Pattern Matching**: Flexible pattern language with variables and applications
- * - **Rewrite Rules**: Declarative term rewriting with optional conditions
- * - **Equality Saturation**: Apply rewrite rules exhaustively to discover optimizations
- * - **Memory Management**: Integration with TLSF allocator for predictable performance
- * - **Utility Library**: Hash functions, string pools, and I/O utilities
+ * - Efficient e-graph implementation with union-find canonicalization
+ * - Hash-consing for structural sharing of enodes
+ * - Congruence closure via rebuild
+ * - Pattern-based rewrite engine (`eqx_pattern_*`, `eqx_rewrite_*`)
+ * - RedVisage RVSDG nodes: pure ops, gamma/theta, state tokens, extract
+ * - RedVisage lowering with memoization (`khash`) and explicit child threading
+ * - RedVisage extraction with memoization and structured reconstruction
  *
  * @section arch_sec Architecture
  *
- * The library is organized into several key components:
+ * @subsection arch_core Equinox Core
+ * - @ref enode.h: `eqx_enode_t`
+ * - @ref eclass.h: `eqx_eclass_t`
+ * - @ref egraph.h: `eqx_egraph_t` and iteration/statistics APIs
+ * - @ref unionfind.h: canonical representative management
+ * - @ref hashcons.h: structural deduplication
+ * - @ref rewrite.h: pattern matching and rewrite execution
  *
- * - **E-Node** (@ref enode.h): Represents terms with operators and children
- * - **E-Class** (@ref eclass.h): Equivalence classes containing equivalent e-nodes
- * - **E-Graph** (@ref egraph.h): Main data structure orchestrating all components
- * - **Union-Find** (@ref unionfind.h): Efficient equivalence relation tracking
- * - **Hash Consing** (@ref hashcons.h): Structural sharing via hash table
- * - **Rewrite System** (@ref rewrite.h): Pattern matching and term rewriting
- * - **Utilities** (@ref libutils.h): Memory, hashing, and string utilities
+ * @subsection arch_redvisage RedVisage Layer
+ * - `include/redvisage/node.h`: RVSDG graph, region, and node definitions
+ * - `include/redvisage/lower.h`: `redvisage_lower_to_egraph(...)`
+ * - `include/redvisage/rewrite.h`: default RedVisage rewrite set
+ * - `include/redvisage/extract.h`: `redvisage_extract_graph(...)`
+ * - `include/redvisage/opcodes.h`: stable opcode/metadata encoding used by lowering/extraction
  *
- * @section usage_sec Basic Usage
+ * @subsection arch_common Common/Language Direction
+ * The `src/common` and `include/common` trees are intended for EQVSG language,
+ * dumping, rule language (ERL), memory wrappers, and compiler-profile tooling.
+ * This is the integration surface for `eqvsg` CLI functionality.
  *
- * @subsection usage_create Creating an E-Graph
+ * @section quickstart_sec Equinox Quick Start
  *
+ * @subsection quickstart_create Create Graph
  * @code{.c}
- * #include "equinox/equinox.h"
+ * #include "equinox/egraph.h"
  *
- * // Create e-graph with default configuration
- * eqx_egraph_config_t config = eqx_egraph_config_default();
- * eqx_egraph_t *egraph = eqx_egraph_create(&config);
+ * eqx_egraph_config_t cfg = eqx_egraph_config_default();
+ * eqx_egraph_t* eg = eqx_egraph_create(&cfg);
  * @endcode
  *
- * @subsection usage_add Adding Terms
- *
+ * @subsection quickstart_add Add Terms
  * @code{.c}
- * // Add constant: a
- * eqx_eclass_id_t a = eqx_egraph_add(egraph, OP_CONST_A, NULL, 0);
+ * enum { OP_A = 1, OP_B = 2, OP_F = 10 };
  *
- * // Add constant: b
- * eqx_eclass_id_t b = eqx_egraph_add(egraph, OP_CONST_B, NULL, 0);
- *
- * // Add application: f(a, b)
- * eqx_eclass_id_t children[] = {a, b};
- * eqx_eclass_id_t f_ab = eqx_egraph_add(egraph, OP_F, children, 2);
+ * eqx_eclass_id_t a = eqx_egraph_add(eg, OP_A, 0, NULL);
+ * eqx_eclass_id_t b = eqx_egraph_add(eg, OP_B, 0, NULL);
+ * eqx_eclass_id_t ch[] = { a, b };
+ * eqx_eclass_id_t f_ab = eqx_egraph_add(eg, OP_F, 2, ch);
  * @endcode
  *
- * @subsection usage_union Asserting Equality
- *
+ * @subsection quickstart_union Rewrite and Rebuild
  * @code{.c}
- * // Assert that a and b are equal
- * eqx_egraph_union(egraph, a, b);
- *
- * // Rebuild to propagate equalities
- * eqx_egraph_rebuild(egraph);
- * @endcode
- *
- * @subsection usage_rewrite Rewriting Terms
- *
- * @code{.c}
- * // Create pattern: f(x, x) -> g(x)
- * eqx_pattern_t *x1 = eqx_pattern_var("x");
- * eqx_pattern_t *x2 = eqx_pattern_var("x");
- * eqx_pattern_t *lhs_children[] = {x1, x2};
- * eqx_pattern_t *lhs = eqx_pattern_app(OP_F, lhs_children, 2);
- *
- * eqx_pattern_t *x3 = eqx_pattern_var("x");
- * eqx_pattern_t *rhs_children[] = {x3};
- * eqx_pattern_t *rhs = eqx_pattern_app(OP_G, rhs_children, 1);
- *
- * // Create rewrite rule
- * eqx_rewrite_rule_t *rule = eqx_rewrite_rule_create("simplify", lhs, rhs, NULL);
- *
- * // Apply rule to all e-classes
- * eqx_rewrite_rule_t *rules[] = {rule};
- * size_t applied = eqx_rewrite_apply_all(egraph, rules, 1, 100);
- *
- * // Clean up
- * eqx_rewrite_rule_destroy(rule);
- * @endcode
- *
- * @subsection usage_cleanup Cleanup
- *
- * @code{.c}
- * eqx_egraph_destroy(egraph);
- * @endcode
- *
- * @section examples_sec Examples
- *
- * @subsection ex_arithmetic Arithmetic Simplification
- *
- * @code{.c}
- * // Create e-graph
- * eqx_egraph_config_t config = eqx_egraph_config_default();
- * eqx_egraph_t *eg = eqx_egraph_create(&config);
- *
- * // Add terms: x + 0
- * eqx_eclass_id_t x = eqx_egraph_add(eg, OP_VAR_X, NULL, 0);
- * eqx_eclass_id_t zero = eqx_egraph_add(eg, OP_CONST_0, NULL, 0);
- * eqx_eclass_id_t children[] = {x, zero};
- * eqx_eclass_id_t x_plus_0 = eqx_egraph_add(eg, OP_ADD, children, 2);
- *
- * // Create rewrite rule: x + 0 -> x
- * eqx_pattern_t *pat_x = eqx_pattern_var("x");
- * eqx_pattern_t *pat_0 = eqx_pattern_app(OP_CONST_0, NULL, 0);
- * eqx_pattern_t *lhs_ch[] = {pat_x, pat_0};
- * eqx_pattern_t *lhs = eqx_pattern_app(OP_ADD, lhs_ch, 2);
- * eqx_pattern_t *rhs = eqx_pattern_var("x");
- *
- * eqx_rewrite_rule_t *rule = eqx_rewrite_rule_create("add_zero", lhs, rhs, NULL);
- *
- * // Apply rule
- * eqx_rewrite_apply(rule, eg, x_plus_0);
+ * eqx_egraph_union(eg, a, b);
  * eqx_egraph_rebuild(eg);
+ * @endcode
  *
- * // Now x and (x + 0) are in the same e-class
- * assert(eqx_egraph_find(eg, x) == eqx_egraph_find(eg, x_plus_0));
+ * @subsection quickstart_rule Pattern Rule
+ * @code{.c}
+ * enum { OP_ADD = 20, OP_ZERO = 21 };
  *
- * // Cleanup
- * eqx_rewrite_rule_destroy(rule);
+ * eqx_pattern_t* x = eqx_pattern_var("x");
+ * eqx_pattern_t* z = eqx_pattern_app(OP_ZERO, NULL, 0);
+ * eqx_pattern_t* lhs_children[] = { x, z };
+ * eqx_pattern_t* lhs = eqx_pattern_app(OP_ADD, lhs_children, 2);
+ * eqx_pattern_t* rhs = eqx_pattern_var("x");
+ *
+ * eqx_rewrite_rule_t* add_zero = eqx_rewrite_rule_create("add-zero", lhs, rhs, NULL);
+ * eqx_rewrite_apply_all(add_zero, eg);
+ * eqx_egraph_rebuild(eg);
+ * eqx_rewrite_rule_destroy(add_zero);
+ * @endcode
+ *
+ * @subsection quickstart_destroy Cleanup
+ * @code{.c}
  * eqx_egraph_destroy(eg);
  * @endcode
  *
- * @subsection ex_commutativity Commutativity
+ * @section redvisage_sec RedVisage Usage
  *
+ * RedVisage models data flow and side effects explicitly. State is represented as
+ * values in the graph (state tokens) and must be threaded through side-effecting ops.
+ *
+ * @subsection redvisage_nodes RVSDG Node Kinds
+ * - `RVSDG_NODE_CONST_INT`
+ * - `RVSDG_NODE_VAR`
+ * - `RVSDG_NODE_OP` (`RVSDG_OP_ADD`, `RVSDG_OP_MUL`, `RVSDG_OP_LESS_THAN`, `RVSDG_OP_PRINT`, `RVSDG_OP_YIELD`)
+ * - `RVSDG_NODE_GAMMA` (branch)
+ * - `RVSDG_NODE_THETA` (loop)
+ * - `RVSDG_NODE_STATE`
+ * - `RVSDG_NODE_EXTRACT`
+ *
+ * @subsection redvisage_pipeline RVSDG -> E-Graph -> RVSDG
  * @code{.c}
- * // Create rule: x + y -> y + x
- * eqx_pattern_t *x1 = eqx_pattern_var("x");
- * eqx_pattern_t *y1 = eqx_pattern_var("y");
- * eqx_pattern_t *lhs_ch[] = {x1, y1};
- * eqx_pattern_t *lhs = eqx_pattern_app(OP_ADD, lhs_ch, 2);
+ * #include "equinox/egraph.h"
+ * #include "redvisage/node.h"
+ * #include "redvisage/lower.h"
+ * #include "redvisage/rewrite.h"
+ * #include "redvisage/extract.h"
  *
- * eqx_pattern_t *y2 = eqx_pattern_var("y");
- * eqx_pattern_t *x2 = eqx_pattern_var("x");
- * eqx_pattern_t *rhs_ch[] = {y2, x2};
- * eqx_pattern_t *rhs = eqx_pattern_app(OP_ADD, rhs_ch, 2);
+ * rvsdg_graph_t* g = redvisage_graph_create();
+ * rvsdg_node_t* x = redvisage_make_var(g, "x");
+ * rvsdg_node_t* two = redvisage_make_const_int(g, 2);
+ * rvsdg_node_t* mul_inputs[] = { x, two };
+ * rvsdg_node_t* m = redvisage_make_op(g, RVSDG_OP_MUL, 2, mul_inputs);
+ * redvisage_set_root(g, m);
  *
- * eqx_rewrite_rule_t *comm = eqx_rewrite_rule_create("commutative", lhs, rhs, NULL);
+ * eqx_egraph_t* eg = eqx_egraph_create(NULL);
+ * eqx_eclass_id_t root = redvisage_lower_to_egraph(g, eg);
+ *
+ * size_t n_rules = 0;
+ * eqx_rewrite_rule_t** rules = redvisage_default_rules(&n_rules);
+ * eqx_rewrite_apply_rules(rules, n_rules, eg, 8);
+ *
+ * rvsdg_graph_t* opt = redvisage_extract_graph(eg, root);
+ *
+ * redvisage_default_rules_destroy(rules, n_rules);
+ * redvisage_graph_destroy(opt);
+ * eqx_egraph_destroy(eg);
+ * redvisage_graph_destroy(g);
  * @endcode
  *
- * @section perf_sec Performance Considerations
+ * @subsection redvisage_regions Regions, Gamma, Theta
+ * Regions (`rvsdg_region_t`) own argument lists and a yield node.
+ * Current lowering encodes gamma/theta interface metadata directly into enode
+ * children so extraction can reconstruct variable branch/loop arities.
  *
- * - **Hash Consing**: Ensures each unique term is stored only once
- * - **Union-Find**: Near-constant time equivalence queries with path compression
- * - **Congruence Closure**: Efficient propagation using parent tracking
- * - **Memory Pooling**: TLSF allocator provides O(1) allocation/deallocation
- * - **Iteration Limits**: Configurable bounds prevent infinite rewriting loops
+ * @section eqvsg_sec EQVSG Language and CLI (Design Intent)
  *
- * @section config_sec Configuration
+ * EQVSG is the S-expression front-end intended to map source IL to RVSDG,
+ * run equality saturation, and emit optimized RVSDG or downstream artifacts.
  *
- * The e-graph behavior can be customized via @ref eqx_egraph_config_t:
+ * Planned CLI shape:
+ * - `eqvsg [OPTIONS] <INPUT_FILE>`
+ * - Optimization levels, custom rules, dump controls, dot emission, run mode
  *
- * - `initial_capacity`: Initial number of e-classes (default: 1024)
- * - `hashcons_capacity`: Hash table size (default: 2048)
- * - `hashcons_load_factor`: Resize threshold (default: 0.75)
- * - `rebuild_limit`: Max congruence closure iterations (default: 100)
+ * Related subsystems are expected under:
+ * - `src/common/eqvsg` + `include/common/eqvsg.h`
+ * - `src/common/dump` + `include/common/dump.h`
+ * - `src/common/erl` + `include/common/erl.h`
+ * - `src/common/compiler` + `include/common/compiler.h`
+ *
+ * @section build_sec Building
+ *
+ * @subsection build_cmake CMake
+ * @code{.sh}
+ * cmake -S . -B build
+ * cmake --build build
+ * @endcode
+ *
+ * Main CMake options:
+ * - `EQX_BUILD_TESTS` (legacy alias for `EQX_BUILD_UNITTEST`)
+ * - `EQX_BUILD_UNITTEST`
+ * - `EQX_BUILD_FUZZ`
+ * - `EQX_BUILD_DOCS`
+ * - `EQX_BUILD_SHARED`
+ * - `EQX_BUILD_STATIC`
+ *
+ * @subsection build_meson Meson
+ * @code{.sh}
+ * meson setup build-meson
+ * meson compile -C build-meson
+ * @endcode
+ *
+ * @section test_sec Testing
+ *
+ * @code{.sh}
+ * ctest --test-dir build --output-on-failure
+ * @endcode
+ *
+ * RedVisage integration coverage currently includes end-to-end tests in
+ * `tests/test_redvisage.c` (build RVSDG, lower, rewrite, extract).
+ *
+ * @section perf_sec Performance Notes
+ *
+ * - Equinox core operations remain amortized-efficient due to hashcons + union-find
+ * - Saturation cost is rewrite-set and iteration-limit dependent
+ * - RedVisage lowering/extraction use memoized traversals (`khash`) to avoid duplication
  *
  * @section thread_sec Thread Safety
  *
- * The library is **not thread-safe** by default. Each e-graph instance should be
- * accessed by a single thread, or external synchronization must be provided.
- *
- * @section memory_sec Memory Management
- *
- * - All `create` functions return dynamically allocated objects
- * - All objects must be freed with corresponding `destroy` functions
- * - The library uses standard `malloc`/`free` internally
- * - Integration with TLSF allocator available via libutils
+ * Equinox and RedVisage APIs are not internally synchronized.
+ * Use one graph per thread or external synchronization.
  *
  * @section license_sec License
  *
- * Equinox E-Graph Library
- * Copyright (c) 2025
- *
- * Licensed under the MIT License.
- *
- * @section refs_sec References
- *
- * - Willsey et al. "egg: Fast and Extensible Equality Saturation" (POPL 2021)
- * - Nelson & Oppen "Fast Decision Procedures Based on Congruence Closure" (JACM 1980)
- * - Tarjan "Efficiency of a Good But Not Linear Set Union Algorithm" (JACM 1975)
- *
- * @section contact_sec Contact
- *
- * For bug reports and feature requests, please visit the project repository.
+ * MIT License (see `LICENSE`).
  */
 
-/**
- * @defgroup core Core Components
- * @brief Core e-graph data structures and algorithms
- */
-
-/**
- * @defgroup rewrite Rewrite System
- * @brief Pattern matching and term rewriting
- */
-
-/**
- * @defgroup utils Utilities
- * @brief Memory management, hashing, and helper functions
- */
-
-/**
- * @page building Building the Library
- *
- * @section build_cmake CMake Build
- *
- * @code{.sh}
- * mkdir build
- * cd build
- * cmake ..
- * cmake --build .
- * @endcode
- *
- * @section build_options Build Options
- *
- * - `BUILD_TESTS`: Build test suite (default: ON)
- * - `BUILD_DOCS`: Build documentation (default: OFF)
- * - `BUILD_EXAMPLES`: Build example programs (default: ON)
- * - `ENABLE_ASAN`: Enable AddressSanitizer (default: OFF)
- * - `ENABLE_UBSAN`: Enable UndefinedBehaviorSanitizer (default: OFF)
- *
- * @section build_install Installation
- *
- * @code{.sh}
- * cmake --install .
- * @endcode
- *
- * @section build_link Linking
- *
- * @code{.cmake}
- * find_package(Equinox REQUIRED)
- * target_link_libraries(your_target PRIVATE Equinox::equinox)
- * @endcode
- */
-
-/**
- * @page testing Testing
- *
- * @section test_run Running Tests
- *
- * @code{.sh}
- * cd build
- * ctest --output-on-failure
- * @endcode
- *
- * @section test_coverage Coverage
- *
- * @code{.sh}
- * cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON ..
- * cmake --build .
- * ctest
- * gcovr -r .. --html --html-details -o coverage.html
- * @endcode
- *
- * @section test_sanitizers Sanitizers
- *
- * @code{.sh}
- * cmake -DENABLE_ASAN=ON -DENABLE_UBSAN=ON ..
- * cmake --build .
- * ctest
- * @endcode
- */
-
-/**
- * @page advanced Advanced Topics
- *
- * @section adv_custom Custom Operators
- *
- * Operators are represented as integers (`eqx_operator_t`). You can define
- * your own operator constants:
- *
- * @code{.c}
- * typedef enum {
- *     OP_ADD = 1,
- *     OP_MUL = 2,
- *     OP_NEG = 3,
- *     OP_CONST = 100,
- *     // ... more operators
- * } my_operators_t;
- * @endcode
- *
- * @section adv_conditions Conditional Rewriting
- *
- * Rewrite rules can have conditions that must be satisfied:
- *
- * @code{.c}
- * bool is_positive(const eqx_subst_t *subst, void *ctx) {
- *     eqx_eclass_id_t x_id;
- *     if (!eqx_subst_lookup(subst, "x", &x_id)) {
- *         return false;
- *     }
- *     // Check if x represents a positive constant
- *     // (requires custom analysis)
- *     return check_positive(x_id, ctx);
- * }
- *
- * eqx_rewrite_rule_t *rule = eqx_rewrite_rule_create(
- *     "sqrt_positive", lhs, rhs, is_positive
- * );
- * @endcode
- *
- * @section adv_extraction Term Extraction
- *
- * After equality saturation, you typically want to extract the "best" term
- * from an e-class. This requires implementing a cost function and extraction
- * algorithm (not included in core library):
- *
- * @code{.c}
- * // Pseudo-code for extraction
- * typedef size_t (*cost_fn_t)(eqx_enode_t *node);
- *
- * eqx_enode_t* extract_best(eqx_egraph_t *eg, eqx_eclass_id_t id, cost_fn_t cost) {
- *     eqx_eclass_t *ec = eqx_egraph_get_class(eg, id);
- *     eqx_enode_t *best = NULL;
- *     size_t min_cost = SIZE_MAX;
- *     
- *     for (eqx_enode_t *node = ec->nodes; node; node = node->next) {
- *         size_t c = cost(node);
- *         if (c < min_cost) {
- *             min_cost = c;
- *             best = node;
- *         }
- *     }
- *     return best;
- * }
- * @endcode
- *
- * @section adv_analysis E-Class Analysis
- *
- * You can attach custom data to e-classes for analysis:
- *
- * @code{.c}
- * // Extend e-class with custom data
- * typedef struct {
- *     eqx_eclass_t base;
- *     int constant_value;  // For constant folding
- *     bool is_constant;
- * } analyzed_eclass_t;
- * @endcode
- *
- * @section adv_persistence Persistent E-Graphs
- *
- * For persistent storage, serialize the e-graph structure:
- *
- * @code{.c}
- * // Pseudo-code for serialization
- * void serialize_egraph(eqx_egraph_t *eg, FILE *fp) {
- *     // Write header
- *     // Write union-find structure
- *     // Write all e-nodes
- *     // Write hash consing table
- * }
- *
- * eqx_egraph_t* deserialize_egraph(FILE *fp) {
- *     // Read header
- *     // Reconstruct union-find
- *     // Reconstruct e-nodes
- *     // Rebuild hash consing
- * }
- * @endcode
- */
+/** @defgroup core Core Components */
+/** @defgroup rewrite Rewrite System */
+/** @defgroup redvisage RedVisage RVSDG Frontend */
+/** @defgroup common Common / EQVSG Layers */
 
 /**
  * @page faq FAQ
  *
- * @section faq_what What is an E-Graph?
+ * @section faq_egraph What is an e-graph?
+ * A compact representation of many equivalent terms, organized by e-classes.
  *
- * An e-graph (equality graph) is a data structure that compactly represents
- * a set of terms and equivalence relations between them. It enables efficient
- * equality saturation, a technique for program optimization and theorem proving.
+ * @section faq_redvisage What does RedVisage add?
+ * Structured RVSDG nodes (gamma/theta), explicit state-token flow, and
+ * lowering/extraction bridges to Equinox.
  *
- * @section faq_when When Should I Use E-Graphs?
- *
- * E-graphs are useful when you need to:
- * - Apply many rewrite rules exhaustively
- * - Explore multiple equivalent representations simultaneously
- * - Optimize programs or expressions
- * - Implement decision procedures for equality logic
- *
- * @section faq_perf How Fast is Equinox?
- *
- * Performance depends on workload, but typical operations:
- * - Term addition: O(1) amortized (hash consing)
- * - Union: O(α(n)) amortized (union-find with path compression)
- * - Congruence closure: O(n log n) per rebuild
- * - Pattern matching: O(nodes × patterns)
- *
- * @section faq_memory How Much Memory Does It Use?
- *
- * Memory usage is proportional to:
- * - Number of unique terms (e-nodes)
- * - Number of equivalence classes (e-classes)
- * - Hash table size (configurable)
- *
- * Hash consing ensures each unique term is stored only once.
- *
- * @section faq_limits What Are the Limits?
- *
- * - Maximum e-classes: Limited by `eqx_eclass_id_t` (typically 2^32)
- * - Maximum children per node: Limited by `size_t`
- * - Rebuild iterations: Configurable (default: 100)
- *
- * @section faq_thread Is It Thread-Safe?
- *
- * No. Each e-graph instance should be accessed by a single thread.
- * Use external synchronization if needed.
- *
- * @section faq_compare How Does It Compare to egg?
- *
- * Equinox is inspired by the egg library (Rust) but implemented in C:
- * - Similar core algorithms (union-find, congruence closure)
- * - C API for embedding in other languages
- * - Manual memory management
- * - No built-in e-class analysis (extensible by user)
+ * @section faq_threadsafe Is it thread-safe?
+ * No. Use external synchronization for shared access.
  */
 
 /**
  * @page changelog Changelog
  *
- * @section v0_1_0 Version 0.1.0 (Initial Release)
+ * @section v0_1_0 Version 0.1.0
+ * - Equinox core e-graph, rewrite engine, and tests.
  *
- * - Core e-graph implementation
- * - Union-find with path compression
- * - Hash consing for structural sharing
- * - Congruence closure algorithm
- * - Pattern matching and rewriting
- * - Comprehensive test suite
- * - Documentation and examples
+ * @section v0_2_0_work Version 0.2.0 (in progress)
+ * - RedVisage RVSDG node/region layer.
+ * - RVSDG lowering and extraction bridges.
+ * - RedVisage rewrite scaffolding and tests.
+ * - Build system integration for RedVisage sources.
+ */
+
+/**
+ * @page eqvsg_cli EQVSG CLI Reference
+ *
+ * @section eqvsg_synopsis Synopsis
+ *
+ * @code{.text}
+ * eqvsg [OPTIONS] <INPUT_FILE>
+ * @endcode
+ *
+ * @section eqvsg_args Arguments
+ *
+ * - `<INPUT_FILE>`: Path to input IL file (`.vsg` or `.il`) containing S-expressions.
+ *
+ * @section eqvsg_options Options
+ *
+ * - `-o, --output <FILE>`
+ *   - Write optimized RVSDG to `<FILE>`. If omitted, output goes to stdout.
+ *
+ * - `-O, --opt-level <LEVEL>`
+ *   - Saturation configuration profile:
+ *     - `0`: Parse/lower only (no optimization)
+ *     - `1`: Basic rules, node limit 10,000 (default)
+ *     - `2`: Aggressive rules, loop-oriented transforms, node limit 50,000
+ *
+ * - `-r, --rules <FILE>`
+ *   - Path to custom rewrite ruleset (`.rules`).
+ *   - Overrides built-in rules for selected optimization level.
+ *
+ * @section eqvsg_debug Debug and Dumping
+ *
+ * - `--dump-rvsdg`
+ *   - Dump parsed RedVisage RVSDG to stderr before lowering.
+ *
+ * - `--dump-egraph`
+ *   - Dump Equinox e-graph classes after saturation.
+ *
+ * - `--emit-dot <DIR>`
+ *   - Emit Graphviz `.dot` files for pipeline stages into `<DIR>`.
+ *
+ * @section eqvsg_exec Execution
+ *
+ * - `--run`
+ *   - Execute/interpet extracted optimized RVSDG immediately (when runtime is enabled).
+ *
+ * - `-a, --args <ARGS>...`
+ *   - Positional arguments passed to runtime execution mode.
+ *
+ * @section eqvsg_general General
+ *
+ * - `-v, --verbose`: Enable verbose logs (iteration/saturation stats).
+ * - `-h, --help`: Show help.
+ * - `-V, --version`: Show version.
+ *
+ * @section eqvsg_examples Examples
+ *
+ * @code{.sh}
+ * # Parse + optimize with defaults
+ * eqvsg input.vsg
+ *
+ * # Aggressive optimization and custom output
+ * eqvsg -O 2 -o out.vsg input.vsg
+ *
+ * # Use custom rewrite file and emit debug graphs
+ * eqvsg --rules rules/basic.rules --dump-rvsdg --dump-egraph --emit-dot ./dot input.il
+ *
+ * # Run optimized program with arguments
+ * eqvsg --run -a foo bar baz input.vsg
+ * @endcode
  */
 
 #endif /* EQUINOX_DOXYGEN_I */
